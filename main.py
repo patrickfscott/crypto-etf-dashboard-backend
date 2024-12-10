@@ -79,11 +79,27 @@ async def get_flows(crypto_type: str, days: Optional[int] = 14):
                 ETFFlow.date.in_([d.date() for d in business_days])
             ).all()
             
+            # Create a list of flows, using 0 for missing dates
+            daily_flows = [0] * len(business_days)
+            cumulative_flows = [0] * len(business_days)
+            current_aum = 0
+            
+            # Fill in the actual values we have
+            for flow in flows:
+                try:
+                    # Find the index of this flow's date in our business days
+                    date_index = [d.date() for d in business_days].index(flow.date)
+                    daily_flows[date_index] = float(flow.daily_flow)
+                    cumulative_flows[date_index] = float(flow.cumulative_flow)
+                    current_aum = float(flow.aum)
+                except ValueError:
+                    continue  # Skip if date not found in business_days
+            
             etf_data = {
                 'ticker': etf,
-                'daily_flows': [flow.daily_flow for flow in flows],
-                'cumulative_flows': [flow.cumulative_flow for flow in flows],
-                'aum': flows[-1].aum if flows else 0
+                'daily_flows': daily_flows,
+                'cumulative_flows': cumulative_flows,
+                'aum': current_aum
             }
             results.append(etf_data)
         
