@@ -11,6 +11,7 @@ from sqlalchemy.orm import sessionmaker
 import os
 from datetime import datetime, timedelta
 import pandas as pd
+from sqlalchemy import text
 
 app = FastAPI()
 
@@ -128,6 +129,11 @@ async def update_flows():
         for etf_list, crypto_type in [(BTC_ETFS, 'BTC'), (ETH_ETFS, 'ETH')]:
             for ticker in etf_list:
                 try:
+
+                    # First, clear all existing data
+                    db.execute(text("TRUNCATE TABLE etf_flows;"))
+                    db.commit()
+
                     # Fetch all historical data
                     etf = yf.Ticker(ticker)
                     hist = etf.history(period="max")
