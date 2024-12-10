@@ -126,13 +126,13 @@ async def update_flows():
     """
     db = SessionLocal()
     try:
+        # First, clear all existing data
+        db.execute(text("TRUNCATE TABLE etf_flows;"))
+        db.commit()
+        
         for etf_list, crypto_type in [(BTC_ETFS, 'BTC'), (ETH_ETFS, 'ETH')]:
             for ticker in etf_list:
                 try:
-
-                    # First, clear all existing data
-                    db.execute(text("TRUNCATE TABLE etf_flows;"))
-                    db.commit()
 
                     # Fetch all historical data
                     etf = yf.Ticker(ticker)
