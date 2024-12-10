@@ -116,24 +116,24 @@ async def update_flows():
                 hist = etf.history(period="1d")
                 
                 if not hist.empty:
-                    # Calculate flows (simplified - you'll need to add your actual flow calculation logic)
-                    daily_flow = hist['Volume'].iloc[-1] * hist['Close'].iloc[-1] / 1e6  # Convert to millions
+                    # Calculate flows and convert to regular Python float
+                    daily_flow = float(hist['Volume'].iloc[-1] * hist['Close'].iloc[-1] / 1e6)
                     
                     # Get previous cumulative flow
                     prev_flow = db.query(ETFFlow).filter(
                         ETFFlow.ticker == ticker
                     ).order_by(ETFFlow.date.desc()).first()
                     
-                    cumulative_flow = (prev_flow.cumulative_flow if prev_flow else 0) + daily_flow
+                    cumulative_flow = float((prev_flow.cumulative_flow if prev_flow else 0) + daily_flow)
                     
-                    # Create new record
+                    # Create new record with explicit float conversion
                     new_flow = ETFFlow(
                         date=datetime.now().date(),
                         ticker=ticker,
                         type=crypto_type,
                         daily_flow=daily_flow,
                         cumulative_flow=cumulative_flow,
-                        aum=hist['Close'].iloc[-1] * hist['Volume'].iloc[-1] / 1e6
+                        aum=float(hist['Close'].iloc[-1] * hist['Volume'].iloc[-1] / 1e6)
                     )
                     db.add(new_flow)
         
