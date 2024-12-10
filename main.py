@@ -121,39 +121,64 @@ async def get_flows(crypto_type: str, days: Optional[int] = 14):
 @app.get("/api/update")
 async def update_flows():
     """
-    Update ETF flow data - should be called daily via cron job
+    Update all historical ETF flow data
     """
     db = SessionLocal()
     try:
         for etf_list, crypto_type in [(BTC_ETFS, 'BTC'), (ETH_ETFS, 'ETH')]:
             for ticker in etf_list:
-                # Fetch data from yfinance
-                etf = yf.Ticker(ticker)
-                hist = etf.history(period="1d")
-                
-                if not hist.empty:
-                    # Calculate flows and convert to regular Python float
-                    daily_flow = float(hist['Volume'].iloc[-1] * hist['Close'].iloc[-1] / 1e6)
+                try:
+                    # Fetch all historical data
+                    etf = yf.Ticker(ticker)
+                    hist = etf.history(period="max")
                     
-                    # Get previous cumulative flow
-                    prev_flow = db.query(ETFFlow).filter(
-                        ETFFlow.ticker == ticker
-                    ).order_by(ETFFlow.date.desc()).first()
-                    
-                    cumulative_flow = float((prev_flow.cumulative_flow if prev_flow else 0) + daily_flow)
-                    
-                    # Create new record with explicit float conversion
-                    new_flow = ETFFlow(
-                        date=datetime.now().date(),
-                        ticker=ticker,
-                        type=crypto_type,
-                        daily_flow=daily_flow,
-                        cumulative_flow=cumulative_flow,
-                        aum=float(hist['Close'].iloc[-1] * hist['Volume'].iloc[-1] / 1e6)
-                    )
-                    db.add(new_flow)
+                    # Process each day
+                    for date, daily_data in hist.iterrows():
+                        # Convert timestamp to date
+                        flow_date = date.date()
+                        
+                        # Calculate flows and convert to regular Python float
+                        daily_flow = float(daily_data['Volume'] * daily_data['Close'] / 1e6)
+                        
+                        # Get previous cumulative flow
+                        prev_flow = db.query(ETFFlow).filter(
+                            ETFFlow.ticker == ticker,
+                            ETFFlow.date < flow_date
+                        ).order_by(ETFFlow.date.desc()).first()
+                        
+                        cumulative_flow = float((prev_flow.cumulative_flow if prev_flow else 0) + daily_flow)
+                        
+                        # Check if we already have data for this date
+                        existing_flow = db.query(ETFFlow).filter(
+                            ETFFlow.ticker == ticker,
+                            ETFFlow.date == flow_date
+                        ).first()
+                        
+                        if existing_flow:
+                            # Update existing record
+                            existing_flow.daily_flow = daily_flow
+                            existing_flow.cumulative_flow = cumulative_flow
+                            existing_flow.aum = float(daily_data['Close'] * daily_data['Volume'] / 1e6)
+                        else:
+                            # Create new record
+                            new_flow = ETFFlow(
+                                date=flow_date,
+                                ticker=ticker,
+                                type=crypto_type,
+                                daily_flow=daily_flow,
+                                cumulative_flow=cumulative_flow,
+                                aum=float(daily_data['Close'] * daily_data['Volume'] / 1e6)
+                            )
+                            db.add(new_flow)
+                            
+                        # Commit every 100 records to avoid memory issues
+                        if db.new or db.dirty:
+                            db.commit()
+                            
+                except Exception as e:
+                    print(f"Error processing {ticker}: {str(e)}")
+                    continue  # Move to next ETF if one fails
         
-        db.commit()
         return {"status": "success"}
     except Exception as e:
         db.rollback()
